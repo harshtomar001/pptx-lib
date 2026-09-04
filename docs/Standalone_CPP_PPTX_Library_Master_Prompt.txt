@@ -1,0 +1,1123 @@
+MASTER PROMPT — BUILD A STANDALONE C++ POWERPOINT/PPTX DOCUMENT LIBRARY
+
+ROLE
+
+You are a senior C++ systems engineer, document-format engineer, graphics/rendering engineer, and library architect.
+
+Your task is to design and implement a standalone, reusable, production-quality C++ library for reading, interpreting, laying out, and rendering Microsoft PowerPoint presentations.
+
+THIS IS A LIBRARY PROJECT ONLY.
+
+STRICT SCOPE
+
+The project MUST NOT contain:
+- Android code
+- Java/Kotlin code
+- JNI
+- Android NDK integration
+- Android UI
+- XML Android layouts
+- PDF Studio code
+- Activities/Fragments/ViewModels
+- mobile-specific APIs
+- platform-specific UI code
+- application-specific business logic
+
+The result must be a normal, portable C++ library that another application can consume later.
+
+The library should expose a clean public C++ API and be buildable independently with CMake.
+
+PRIMARY GOAL
+
+Build a reusable C++ presentation engine capable of:
+
+1. Opening .pptx files.
+2. Parsing the OOXML package.
+3. Understanding presentation structure.
+4. Resolving relationships.
+5. Resolving themes, masters, and layouts.
+6. Parsing slides.
+7. Parsing common PowerPoint shapes and objects.
+8. Performing layout and coordinate transformations.
+9. Rendering slides to a generic raster target.
+10. Rendering individual objects.
+11. Rendering thumbnails.
+12. Handling large presentations efficiently.
+13. Using bounded memory.
+14. Supporting concurrent/background rendering safely.
+15. Providing deterministic rendering where practical.
+16. Failing gracefully on unsupported or malformed content.
+
+LEGACY .PPT
+
+Treat legacy binary .ppt support as a separate capability.
+
+Do NOT let legacy .ppt support compromise the architecture for modern .pptx.
+
+First build a strong .pptx engine.
+
+If legacy .ppt support requires a separate parser/backend, design the library so that it can be added later.
+
+IMPORTANT LIBRARY PHILOSOPHY
+
+Do not build a monolithic "PPTX to image" function.
+
+Build a proper document engine with layers:
+
+Input/package layer
+        ↓
+OOXML/XML layer
+        ↓
+Relationship/resource layer
+        ↓
+Presentation model
+        ↓
+Style/theme inheritance
+        ↓
+Layout engine
+        ↓
+Rendering abstraction
+        ↓
+Raster/vector backend
+
+Each layer must have clear responsibilities.
+
+PUBLIC API
+
+Design a stable, minimal public API.
+
+The public API should conceptually allow:
+
+Presentation presentation = Presentation::open(path);
+
+size_t count = presentation.slideCount();
+
+const Slide& slide = presentation.slide(index);
+
+RenderOptions options;
+options.width = 1920;
+options.height = 1080;
+
+RenderTarget target(...);
+
+renderer.render(slide, target, options);
+
+Do not expose internal XML structures through the public API.
+
+Do not force users of the library to understand OOXML.
+
+The API should eventually support both:
+
+- File-based loading
+- Stream-based loading where practical
+
+Use exceptions or a documented Result/Error model consistently. Do not mix error-handling philosophies arbitrarily.
+
+MODULAR ARCHITECTURE
+
+Suggested structure:
+
+include/
+  pptx/
+    presentation.h
+    slide.h
+    shape.h
+    text.h
+    image.h
+    table.h
+    chart.h
+    theme.h
+    layout.h
+    renderer.h
+    render_target.h
+    render_options.h
+    errors.h
+
+src/
+  package/
+    zip_reader.cpp
+    package.cpp
+    package_part.cpp
+
+  xml/
+    xml_reader.cpp
+    xml_utils.cpp
+
+  relationships/
+    relationship_parser.cpp
+
+  presentation/
+    presentation_parser.cpp
+    slide_parser.cpp
+    layout_parser.cpp
+    master_parser.cpp
+    theme_parser.cpp
+
+  model/
+    presentation.cpp
+    slide.cpp
+    shape.cpp
+    text.cpp
+    image.cpp
+    table.cpp
+    chart.cpp
+
+  layout/
+    layout_engine.cpp
+    transform.cpp
+    text_layout.cpp
+    geometry.cpp
+
+  rendering/
+    renderer.cpp
+    shape_renderer.cpp
+    text_renderer.cpp
+    image_renderer.cpp
+    table_renderer.cpp
+
+  graphics/
+    canvas.cpp
+    path.cpp
+    matrix.cpp
+    paint.cpp
+
+  cache/
+    resource_cache.cpp
+    slide_cache.cpp
+
+  fonts/
+    font_manager.cpp
+
+tests/
+examples/
+benchmarks/
+docs/
+
+The exact structure may change if the agent has a better architecture, but separation of concerns must remain.
+
+PPTX PACKAGE ARCHITECTURE
+
+Understand and implement the OOXML package correctly.
+
+A PPTX is a ZIP-based package containing parts and relationships.
+
+Typical structure:
+
+[pptx]
+ ├── [Content_Types].xml
+ ├── _rels/
+ ├── ppt/
+ │   ├── presentation.xml
+ │   ├── slides/
+ │   ├── slideLayouts/
+ │   ├── slideMasters/
+ │   ├── theme/
+ │   ├── media/
+ │   ├── charts/
+ │   ├── embeddings/
+ │   └── _rels/
+ └── docProps/
+
+The engine must resolve relationships rather than relying on filenames or assumed numbering.
+
+PACKAGE SAFETY
+
+PPTX files are untrusted input.
+
+The package layer must protect against:
+- ZIP path traversal
+- malformed ZIP entries
+- decompression bombs
+- huge declared sizes
+- excessive nesting where applicable
+- invalid relationships
+- unexpected external references
+- malformed XML
+- resource exhaustion
+
+Do not blindly extract the entire ZIP package to disk.
+
+Prefer controlled, random-access package reading where practical.
+
+Put configurable safety limits on:
+- maximum uncompressed package size
+- maximum XML size
+- maximum image size
+- maximum number of parts
+- maximum slide count
+- maximum relationship count
+- maximum rendering dimensions
+
+The library must fail predictably when limits are exceeded.
+
+XML PARSING
+
+Use a mature, permissively licensed XML parser rather than writing a complete XML parser from scratch unless there is a compelling engineering reason.
+
+Requirements:
+- namespace-aware parsing
+- safe parsing
+- no external entity/network loading
+- efficient traversal
+- minimal unnecessary DOM duplication
+
+Keep XML parser details out of the public API.
+
+RELATIONSHIPS
+
+Implement proper OOXML relationship resolution.
+
+Support:
+- slide → layout
+- layout → master
+- master → theme
+- slide → media
+- slide → charts
+- other relevant relationships
+
+Never assume relationship IDs map directly to filenames.
+
+PRESENTATION MODEL
+
+Create an internal normalized object model.
+
+Core objects:
+
+Presentation
+ ├── Slide
+ │    ├── Shape
+ │    ├── Group
+ │    ├── Text
+ │    ├── Image
+ │    ├── Table
+ │    └── Chart
+ ├── SlideLayout
+ ├── SlideMaster
+ └── Theme
+
+Keep the model independent from XML node names.
+
+The renderer should operate on the normalized model rather than parsing XML while drawing.
+
+SHAPE MODEL
+
+Support common shapes first:
+
+- rectangle
+- rounded rectangle
+- ellipse
+- line
+- arc where practical
+- freeform/path
+- polygon
+- connectors
+- groups
+
+Each shape should support, where applicable:
+- position
+- size
+- rotation
+- flip
+- fill
+- stroke
+- opacity/transparency
+- line width
+- dash style
+- transform
+- clipping
+- z-order
+
+Use a proper transform system.
+
+COORDINATE SYSTEM
+
+PowerPoint uses its own coordinate units and transformations.
+
+Implement correct conversion to renderer coordinates.
+
+Do not scatter conversion constants throughout the code.
+
+Centralize:
+- EMU conversion
+- angle conversion
+- scale conversion
+- transform matrices
+- slide coordinate mapping
+
+Use a matrix/transform abstraction.
+
+TEXT ENGINE
+
+Text rendering is one of the most important parts of the project.
+
+Support initially:
+- text boxes
+- paragraphs
+- text runs
+- font size
+- font family
+- bold
+- italic
+- underline
+- strike-through where practical
+- foreground color
+- alignment
+- vertical alignment
+- margins
+- wrapping
+- bullets
+- numbering
+- line spacing
+- paragraph spacing
+- indentation
+
+Text must be laid out before rendering.
+
+Do NOT simply draw each string at an approximate coordinate.
+
+Separate:
+
+Text content
+    ↓
+Text layout
+    ↓
+Glyph/run positions
+    ↓
+Text rendering
+
+FONT HANDLING
+
+Design a FontManager abstraction.
+
+Support:
+- font lookup
+- fallback fonts
+- missing-font handling
+- font metrics
+- font loading
+- caching
+
+Do not assume a particular operating system's font directory.
+
+The core library should allow the host application to provide fonts.
+
+If a system-specific font backend is required, isolate it behind an interface.
+
+IMAGES
+
+Support common embedded image formats used by PPTX.
+
+At minimum investigate:
+- PNG
+- JPEG
+- other common OOXML-compatible raster formats
+
+The image subsystem should:
+- decode lazily
+- cache decoded resources
+- avoid duplicate decoding
+- respect maximum dimensions
+- support scaling
+- support cropping
+- support transparency
+- support rotation/transforms
+
+Do not decode every image in the presentation during file opening.
+
+TABLES
+
+Implement a real table model.
+
+Support:
+- rows
+- columns
+- cell text
+- cell fills
+- borders
+- alignment
+- row/column sizes
+- merged cells where practical
+
+CHARTS
+
+Charts should have a separate subsystem.
+
+Initially support common chart types where feasible.
+
+Do not allow chart implementation to contaminate basic shape/text rendering.
+
+If some chart feature cannot be rendered:
+- render the supported portion where possible
+- report unsupported features through diagnostics
+- never crash
+
+THEMES
+
+Implement theme inheritance properly.
+
+Support:
+- theme colors
+- font schemes
+- color transformations
+- default styles where applicable
+
+Resolve theme values before rendering.
+
+SLIDE MASTER / LAYOUT
+
+Implement:
+
+Presentation
+  ↓
+Slide Master
+  ↓
+Slide Layout
+  ↓
+Slide
+  ↓
+Object
+
+Correct inheritance and override behavior is important.
+
+Do not treat each slide as a completely isolated document.
+
+Z-ORDER
+
+Preserve the correct drawing order.
+
+The renderer should process objects in their effective z-order.
+
+GROUPS
+
+Groups must support:
+- nested shapes
+- group transforms
+- scaling
+- rotation
+- inherited transforms
+- clipping where applicable
+
+Use a transform stack rather than manually modifying every coordinate.
+
+RENDERING ARCHITECTURE
+
+Do NOT tightly couple the renderer to a specific UI toolkit.
+
+Create an abstract rendering layer.
+
+Conceptually:
+
+Renderer
+   ↓
+RenderTarget
+   ↓
+Canvas / Graphics backend
+
+The core API should allow a backend to render into:
+- raster bitmap
+- memory buffer
+- host-provided graphics backend
+
+The first production backend may be raster-based.
+
+Avoid introducing Android-specific Canvas types.
+
+RASTER RENDERING
+
+Support rendering at arbitrary requested dimensions.
+
+For example:
+
+RenderOptions:
+- width
+- height
+- scale
+- background behavior
+- antialiasing
+- quality
+
+Never render a 4K slide if the caller only requested a 800px thumbnail.
+
+Render at target resolution.
+
+THUMBNAILS
+
+Provide efficient thumbnail rendering.
+
+Thumbnail rendering should:
+- use lower resolution
+- avoid unnecessary high-resolution image decoding
+- share parsed resources where possible
+- use a separate bounded cache
+
+MEMORY OPTIMIZATION
+
+This is a core requirement.
+
+Never:
+- render all slides eagerly
+- retain every bitmap
+- duplicate large image buffers
+- copy large XML strings unnecessarily
+- keep entire decompressed package contents in memory without reason
+- create unbounded caches
+
+Use:
+- lazy parsing
+- lazy resource decoding
+- LRU caches
+- resource deduplication
+- streaming where practical
+- move semantics
+- RAII
+- bounded allocations
+- buffer reuse where safe
+
+A 200-slide presentation should not require 200 full-resolution slide bitmaps in memory.
+
+RESOURCE CACHING
+
+Use separate caches where appropriate:
+
+- package/part metadata
+- parsed themes
+- fonts
+- decoded images
+- slide models
+- rendered thumbnails
+- rendered slides
+
+Cache keys must include enough information to prevent incorrect reuse.
+
+Caches must have explicit size limits.
+
+THREADING
+
+The library should be thread-safe at the appropriate level.
+
+Do not assume the entire Presentation object is freely mutable from multiple threads.
+
+Prefer immutable presentation data after parsing where practical.
+
+Support concurrent rendering of independent slides if safe.
+
+Avoid global mutable state.
+
+Do not create unbounded worker threads.
+
+Make the threading model clearly documented.
+
+CANCELLATION
+
+Long-running operations should support cancellation.
+
+For example:
+
+CancellationToken token;
+
+renderer.render(slide, target, options, token);
+
+Rendering/parsing should periodically check cancellation.
+
+This is important for applications that abandon a render request.
+
+PERFORMANCE
+
+Optimize based on measurements, not guesses.
+
+Benchmark:
+- file opening
+- package indexing
+- XML parsing
+- slide parsing
+- theme resolution
+- image decoding
+- text layout
+- slide rendering
+- thumbnail rendering
+- cache hits/misses
+
+Create benchmark presentations:
+- text-heavy
+- image-heavy
+- shape-heavy
+- mixed
+- large
+- 100+ slides
+- complex
+
+Record:
+- wall-clock time
+- CPU time where available
+- peak memory
+- allocation counts where practical
+- render throughput
+
+Do not optimize prematurely at the expense of correctness.
+
+C++ QUALITY
+
+Use modern C++.
+
+Prefer C++17 or newer if the build environment permits.
+
+Requirements:
+- RAII
+- smart pointers
+- move semantics
+- const correctness
+- noexcept where justified
+- value types where appropriate
+- clear ownership
+- no memory leaks
+- no undefined behavior
+- no unnecessary virtual dispatch in hot loops
+- no raw owning pointers
+
+Avoid:
+- global mutable state
+- hidden singletons
+- macros where normal C++ is sufficient
+- unnecessary inheritance
+- giant classes
+- giant functions
+
+Keep hot rendering paths allocation-conscious.
+
+BUILD SYSTEM
+
+Use CMake.
+
+The project should support:
+
+cmake -S . -B build
+cmake --build build
+
+Provide:
+- static library target
+- shared library target if practical
+- public include target
+- tests
+- benchmarks
+- examples
+
+Use modern CMake target-based dependency management.
+
+Do not hardcode machine-specific paths.
+
+DEPENDENCIES
+
+Minimize external dependencies.
+
+Before adding a dependency:
+1. Verify license.
+2. Verify commercial redistribution compatibility.
+3. Verify maintenance/activity.
+4. Verify portability.
+5. Verify performance.
+6. Verify whether it is actually necessary.
+
+Prefer mature, permissively licensed libraries.
+
+Document every third-party dependency and its license.
+
+Do not use paid/commercial-only SDKs.
+
+Do not use evaluation versions of commercial SDKs.
+
+Do not include proprietary PowerPoint components.
+
+PORTABILITY
+
+The core library should be platform-independent as much as practical.
+
+Do not use:
+- Android APIs
+- Java
+- Objective-C
+- Windows UI APIs
+- platform-specific GUI APIs
+
+Platform-specific functionality such as font discovery or graphics backends must be isolated.
+
+Ideally support:
+- Linux
+- Windows
+- macOS
+
+Android can consume the resulting native library later, but Android-specific integration MUST NOT be part of this project.
+
+ABI/API DESIGN
+
+Keep the public API stable and minimal.
+
+Hide implementation details using:
+- PImpl where appropriate
+- opaque types where appropriate
+- internal namespaces
+
+Do not expose third-party library types unnecessarily in the public headers.
+
+DIAGNOSTICS
+
+Provide a diagnostic/reporting mechanism.
+
+The host should be able to know:
+- unsupported feature encountered
+- missing image
+- missing font
+- malformed relationship
+- invalid XML
+- fallback rendering used
+- truncated/limited resource
+- renderer warning
+
+Diagnostics should not flood stdout by default.
+
+Allow the host to register a logger/callback if desired.
+
+ERROR HANDLING
+
+Define clear errors such as:
+
+InvalidPackage
+InvalidXml
+MissingPart
+InvalidRelationship
+UnsupportedFeature
+ResourceLimitExceeded
+InvalidShape
+RenderFailure
+Cancelled
+FontUnavailable
+
+Never crash on ordinary malformed/untrusted PPTX input.
+
+CORRUPTED FILE HANDLING
+
+Test files with:
+- invalid ZIP
+- truncated ZIP
+- invalid XML
+- missing relationships
+- missing images
+- invalid dimensions
+- huge dimensions
+- malformed shapes
+- unexpected namespaces
+- duplicate parts
+- missing theme
+- incomplete slide
+
+The library must fail safely.
+
+SECURITY
+
+Treat all presentation content as untrusted.
+
+Do not:
+- execute macros
+- execute embedded programs
+- automatically launch URLs
+- download external resources
+- execute scripts
+- invoke external applications
+
+Embedded content should be data only.
+
+EXTERNAL LINKS
+
+External resources should not be fetched automatically.
+
+If a presentation references external media, expose a diagnostic or controlled resource-resolution interface.
+
+TESTING
+
+Create extensive unit tests.
+
+Test:
+- ZIP/package reader
+- XML parsing
+- relationships
+- theme resolution
+- master/layout inheritance
+- coordinate conversion
+- transforms
+- shape parsing
+- text parsing
+- text layout
+- image loading
+- table parsing
+- chart parsing
+- rendering
+- error handling
+- cancellation
+- cache eviction
+- concurrent rendering
+
+RENDERING REGRESSION TESTS
+
+Create golden/reference slide tests.
+
+For each test presentation:
+1. Render known slide.
+2. Save deterministic output.
+3. Compare against expected output.
+4. Use a controlled pixel tolerance when required.
+5. Report meaningful differences.
+
+Tests should cover:
+- text
+- images
+- shapes
+- rotations
+- transparency
+- groups
+- themes
+- masters
+- layouts
+- tables
+
+Do not rely only on manual visual inspection.
+
+FUZZ TESTING
+
+Where practical, fuzz:
+- ZIP/package parser
+- XML parser boundary handling
+- relationship parser
+- shape parser
+
+The goal is to ensure malformed PPTX files do not cause:
+- crashes
+- memory corruption
+- infinite loops
+- unbounded memory growth
+
+FEATURE ROADMAP
+
+Implement incrementally.
+
+PHASE 0 — RESEARCH AND ARCHITECTURE
+
+Before coding:
+- inspect OOXML presentation structure
+- identify required specifications
+- compare mature open-source dependencies
+- verify licenses
+- choose ZIP/XML/image/font/graphics dependencies
+- define architecture
+- define public API
+- define memory model
+- define rendering model
+
+Do not begin with a giant implementation.
+
+PHASE 1 — PACKAGE + PRESENTATION
+
+Implement:
+- ZIP package access
+- content types
+- relationships
+- presentation.xml
+- slide discovery
+- slide dimensions
+- basic model
+
+Goal:
+Open PPTX and enumerate slides.
+
+PHASE 2 — BASIC RENDERING
+
+Implement:
+- slide background
+- rectangles
+- lines
+- basic shapes
+- images
+- transforms
+- z-order
+
+Goal:
+Render useful basic slides.
+
+PHASE 3 — TEXT
+
+Implement:
+- text boxes
+- paragraphs
+- runs
+- fonts
+- alignment
+- wrapping
+- bullets
+- line spacing
+
+Goal:
+Render ordinary business presentations correctly.
+
+PHASE 4 — THEMES / MASTERS / LAYOUTS
+
+Implement:
+- theme colors
+- fonts
+- master slides
+- layouts
+- inheritance
+
+Goal:
+Improve compatibility substantially.
+
+PHASE 5 — TABLES / ADVANCED SHAPES
+
+Implement:
+- tables
+- merged cells
+- more shape geometries
+- gradients
+- transparency
+- shadows where feasible
+
+PHASE 6 — CHARTS / SMARTART / ADVANCED CONTENT
+
+Implement high-value advanced objects incrementally.
+
+Unsupported features must degrade gracefully.
+
+PHASE 7 — PERFORMANCE
+
+Optimize:
+- lazy parsing
+- image decoding
+- caches
+- text layout
+- rendering
+- allocations
+- memory
+- concurrency
+
+Use benchmarks to guide optimization.
+
+PHASE 8 — HARDENING
+
+Complete:
+- fuzz testing
+- corrupted-file testing
+- stress testing
+- regression tests
+- documentation
+- API review
+- dependency/license review
+
+SUPPORTED VS UNSUPPORTED FEATURES
+
+Maintain an explicit feature matrix.
+
+Example:
+
+Feature                  Status
+--------------------------------
+PPTX package             Supported
+Slides                   Supported
+Text                     Supported
+Images                   Supported
+Basic shapes             Supported
+Tables                   Partial/Supported
+Charts                   Partial
+SmartArt                 Partial/Unsupported
+Animations               Not rendered
+Transitions              Not rendered
+Embedded video           Not rendered
+Macros                   Not executed
+
+Do not claim support for features that are only partially implemented.
+
+EXAMPLES
+
+Provide small standalone C++ examples:
+
+1. Open presentation.
+2. Print slide count.
+3. Inspect slide metadata.
+4. Render one slide.
+5. Render a thumbnail.
+6. Render multiple slides.
+7. Handle errors.
+8. Cancel a long render.
+
+Examples must depend only on the public API.
+
+DOCUMENTATION
+
+Create:
+README.md
+ARCHITECTURE.md
+BUILDING.md
+SUPPORTED_FEATURES.md
+PERFORMANCE.md
+SECURITY.md
+THIRD_PARTY_LICENSES.md
+API documentation where practical.
+
+README must explain:
+- what the library does
+- supported formats
+- supported features
+- unsupported features
+- build instructions
+- dependency licenses
+- example usage
+- limitations
+
+PERFORMANCE REQUIREMENTS
+
+The library must be designed so that:
+- opening a large presentation does not render every slide
+- rendering one slide does not decode every image
+- thumbnails do not require full-resolution rendering
+- caches remain bounded
+- large presentations do not cause unbounded memory growth
+- rendering can occur concurrently when safe
+- cancellation is possible
+
+Do not promise absolute performance numbers before benchmarking.
+
+QUALITY GATE
+
+Do not declare the library complete until:
+
+- CMake builds cleanly
+- tests pass
+- sanitizers are clean where supported
+- no known memory leaks remain
+- corrupted PPTX files fail safely
+- large presentations have been stress-tested
+- rendering regression tests exist
+- dependency licenses are documented
+- public API is documented
+- benchmarks exist
+- supported/unsupported features are documented
+
+FINAL AGENT BEHAVIOR
+
+Work incrementally.
+
+At the end of each phase report:
+1. What was implemented.
+2. Files created/changed.
+3. Public API changes.
+4. Dependencies added.
+5. License information.
+6. Tests added.
+7. Benchmark results.
+8. Memory/performance observations.
+9. Known limitations.
+10. What remains for the next phase.
+
+Do not hide failures.
+
+If a chosen dependency turns out to be unsuitable, stop and reassess instead of forcing the architecture around it.
+
+Do not introduce Android, Java, JNI, PDF Studio, or UI code.
+
+The final deliverable is a standalone C++ PowerPoint/PPTX document-processing and rendering library that can later be integrated into any application.
